@@ -99,6 +99,7 @@ class ContinuousBatchProcessor:
         kv_padding_interval_size: int,
         max_cached_graphs: int,
         use_async_batching: bool,
+        timing_output_file: str | None = None,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -149,15 +150,16 @@ class ContinuousBatchProcessor:
 
         # Setup inputs and outputs
         self.use_async_batching = use_async_batching
+        time_forward_pass = timing_output_file is not None
         if self.use_async_batching:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
             max_cached_graphs = ceil(max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
-                cache, config, model_device, model_dtype, max_cached_graphs
+                cache, config, model_device, model_dtype, max_cached_graphs, time_forward_pass
             )
         else:
             self.inputs_and_outputs = ContinuousBatchingIOs(
-                cache, config, model_device, model_dtype, max_cached_graphs
+                cache, config, model_device, model_dtype, max_cached_graphs, time_forward_pass
             )
 
     def __repr__(self) -> str:
@@ -505,6 +507,7 @@ class ContinuousBatchingManager:
         max_cached_graphs: int = 0,
         allow_block_sharing: bool = True,
         use_async_batching: bool | None = None,
+        timing_output_file: str | None = None,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -517,6 +520,7 @@ class ContinuousBatchingManager:
             max_cached_graphs: (optional) Maximum number of cached CUDA graphs. 0 uses default.
             allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
             use_async_batching: Whether to use async API or not. If None, will be automatically detected.
+            timing_output_file: (optional) Path to write timing data. If set, enables timing instrumentation.
         """
         # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
@@ -536,6 +540,7 @@ class ContinuousBatchingManager:
         self._request_counter = 0
         self._request_lock = threading.Lock()
         self._start_time = perf_counter()
+        self.timing_output_file = timing_output_file
 
         # Generation config related arguments
         generation_config = model.generation_config if generation_config is None else generation_config
@@ -649,10 +654,9 @@ class ContinuousBatchingManager:
                     f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
                 )
             time_tracker = self.batch_processor.inputs_and_outputs.time_tracker
-            if time_tracker is not None:
+            if time_tracker is not None and self.timing_output_file is not None:
                 time_tracker.flush_gpu_queue(blocking=True)
-                # Dump the timing information to a file
-                with open("cb_times.json", "w") as f:
+                with open(self.timing_output_file, "w") as f:
                     json.dump({
                         "cpu_prepare_times": time_tracker.cpu_prepare_times,
                         "gpu_compute_times": time_tracker.gpu_compute_times,
@@ -846,6 +850,7 @@ class ContinuousBatchingManager:
                 kv_padding_interval_size=self.kv_padding_interval_size,
                 max_cached_graphs=self.max_cached_graphs,
                 use_async_batching=self.use_async_batching,
+                timing_output_file=self.timing_output_file,
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
@@ -932,6 +937,7 @@ class ContinuousMixin:
         timeout: float | None = None,
         use_async_batching: bool | None = None,  # leave to None for automatic detection
         max_cached_graphs: int = 0,
+        timing_output_file: str | None = None,
     ) -> Generator[ContinuousBatchingManager]:
         manager = self.init_continuous_batching(
             generation_config=generation_config,
@@ -942,6 +948,7 @@ class ContinuousMixin:
             max_cached_graphs=max_cached_graphs,
             allow_block_sharing=allow_block_sharing,
             use_async_batching=use_async_batching,
+            timing_output_file=timing_output_file,
         )
         manager.start()
         try:
@@ -963,6 +970,7 @@ class ContinuousMixin:
         allow_block_sharing: bool = True,
         use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
+        timing_output_file: str | None = None,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
@@ -975,6 +983,7 @@ class ContinuousMixin:
             allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
             use_async_batching: Whether to use async API or not. If None, will be automatically detected.
             max_cached_graphs: Maximum number of cached CUDA graphs. 0 uses default.
+            timing_output_file: Path to write timing data (JSON). Enables timing if set.
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
         """
@@ -1000,6 +1009,7 @@ class ContinuousMixin:
             allow_block_sharing=allow_block_sharing,
             use_async_batching=use_async_batching,
             max_cached_graphs=max_cached_graphs,
+            timing_output_file=timing_output_file,
         )
 
     # TODO: support streaming
@@ -1016,6 +1026,7 @@ class ContinuousMixin:
         progress_bar: bool = True,
         use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
+        timing_output_file: str | None = None,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1030,6 +1041,7 @@ class ContinuousMixin:
             progress_bar: If set to true, a progress bar will be displayed
             use_async_batching: Whether to use async double buffering or not. If None, will be automatically detected.
             max_cached_graphs: Maximum number of cached CUDA graphs. 0 uses default.
+            timing_output_file: Path to write timing data (JSON). Enables timing if set.
             **kwargs: Additional generation parameters
 
         Returns:
@@ -1055,6 +1067,7 @@ class ContinuousMixin:
             block=True,
             timeout=5,
             use_async_batching=use_async_batching,
+            timing_output_file=timing_output_file,
         )
         logging_cm = logging_redirect_tqdm([logger])
         pbar_cm = tqdm(

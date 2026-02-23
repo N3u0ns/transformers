@@ -43,6 +43,7 @@ class CudaGraphBuffer:
 
 
 class CpuGpuTimeTracker:
+    """Tracks CPU and GPU time spans for performance analysis. GPU times use async CUDA events for no added overhead."""
 
     def __init__(self, compute_stream: torch.cuda.Stream) -> None:
         # Public timing-related accumulators
@@ -83,7 +84,7 @@ class CpuGpuTimeTracker:
             start_event, end_event = self._gpu_queue.popleft()
             # If blocking, wait for the end event to be ready
             if blocking:
-                end_event.wait()
+                end_event.synchronize()
                 self.gpu_compute_times.append(start_event.elapsed_time(end_event))
             # Otherwise, only flush if the end event is ready
             elif end_event.query():
@@ -92,6 +93,7 @@ class CpuGpuTimeTracker:
             else:
                 self._gpu_queue.appendleft((start_event, end_event))
                 break
+
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""

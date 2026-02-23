@@ -22,7 +22,7 @@ from transformers.configuration_utils import PretrainedConfig
 
 from ...utils.metrics import traced
 from .cache import PagedAttentionCache
-from .requests import TMP_TOKEN_ID, FutureRequestState
+from .requests import TMP_TOKEN_ID, FutureRequestState, logger
 from .utils import CpuGpuTimeTracker, CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask
 
 
@@ -119,8 +119,14 @@ class ContinuousBatchingIOs:
         self._setup_static_tensors()
         self._reset_static_tensors(full_reset=True)
         self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
-        # If needed, setup timing-related attributes
-        self.time_tracker = CpuGpuTimeTracker(compute_stream=self.compute_stream) if time_forward_pass else None
+        # Timing requires CUDA for GPU event recording
+        if time_forward_pass and device.type == "cuda":
+            self.time_tracker = CpuGpuTimeTracker(compute_stream=self.compute_stream)
+        elif time_forward_pass:
+            logger.warning("Timing is enabled but CUDA is not available. Timing will be disabled.")
+            self.time_tracker = None
+        else:
+            self.time_tracker = None
 
     @traced(standalone=True)
     def _setup_static_tensors(self) -> None:
@@ -548,7 +554,13 @@ class ContinuousBatchingAsyncIOs:
         # Used in carry over ids computation
         self.max_batch_tokens = cache.max_batch_tokens
         # Timing-related attributes
-        self.time_tracker = CpuGpuTimeTracker(compute_stream=self.compute_stream) if time_forward_pass else None
+        if time_forward_pass and device.type == "cuda":
+            self.time_tracker = CpuGpuTimeTracker(compute_stream=self.compute_stream)
+        elif time_forward_pass:
+            logger.warning("Timing is enabled but CUDA is not available. Timing will be disabled.")
+            self.time_tracker = None
+        else:
+            self.time_tracker = None
 
     # These methods are simple wrapper dispatching to the current IO pair
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
