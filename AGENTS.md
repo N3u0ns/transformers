@@ -97,6 +97,7 @@ See [docs/source/en/modular_transformers.md](docs/source/en/modular_transformers
 - For reusable type definitions, create a `_typing.py` file in the relevant package using `Protocol` from `typing` (see `src/transformers/utils/_typing.py` for the pattern).
 - For classes with dynamically-set attributes, add class-level annotations to make them visible to the type checker.
 - ty configuration lives in `pyproject.toml` under `[tool.ty]`.
+- Never use `assert` for type narrowing — use `if` guards instead (e.g., `if x is not None:` rather than `assert x is not None`).
 
 **Git Workflow**
 - Keep PRs small; avoid unrelated refactors and sweeping reformatting.
