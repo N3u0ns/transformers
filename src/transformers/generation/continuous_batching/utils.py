@@ -13,6 +13,7 @@
 # limitations under the License.
 from collections import OrderedDict, deque
 from math import ceil
+from time import perf_counter
 
 import torch
 
@@ -43,50 +44,54 @@ class CudaGraphBuffer:
 
 class CpuGpuTimeTracker:
 
-    def __init__(self, num_events: int = 8) -> None:
-        self.cpu_queue = deque()
-        self.gpu_queue = deque()
-        self.gpu_compute_times = []
-        self.cpu_prepare_times = []
-        self.event_buffer = [torch.cuda.Event(enable_timing=True) for _ in range(num_events)]
-        self.index = 0
+    def __init__(self, compute_stream: torch.cuda.Stream) -> None:
+        # Public timing-related accumulators
+        self.cpu_prepare_times: list[float] = []
+        self.gpu_compute_times: list[float] = []
+        # Private GPU-related attributes
+        self._compute_stream = compute_stream
+        self._gpu_queue: deque[tuple[torch.cuda.Event, torch.cuda.Event]] = deque()
+        self._event_buffer = [
+            (torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)) for _ in range(3)
+        ]
+        self._index = 0
 
     def get_event_pair(self) -> tuple[torch.cuda.Event, torch.cuda.Event]:
-        start_event = self.event_buffer[self.index]
-        self.index = (self.index + 1) % len(self.event_buffer)
-        end_event = self.event_buffer[self.index]
+        start_event, end_event = self._event_buffer[self._index]
+        self._index = (self._index + 1) % len(self._event_buffer)
         return start_event, end_event
 
     def start_cpu_span(self) -> None:
-        self._start_span(for_cpu=True)
+        start_time = perf_counter()
+        self.cpu_prepare_times.append(start_time)
+
+    def end_cpu_span(self) -> None:
+        end_time = perf_counter()
+        self.cpu_prepare_times[-1] = end_time - self.cpu_prepare_times[-1]
 
     def start_gpu_span(self) -> None:
-        self._start_span(for_cpu=False)
-
-    def _start_span(self, for_cpu: bool) -> None:
+        self.flush_gpu_queue(blocking=False)
         start_event, end_event = self.get_event_pair()
-        start_event.record()
-        # Depending on the span type, select the correct variables
-        queue_to_append = self.cpu_queue if for_cpu else self.gpu_queue
-        queue_to_flush = self.gpu_queue if for_cpu else self.cpu_queue
-        flush_destination = self.gpu_compute_times if for_cpu else self.cpu_prepare_times
-        # Append the event pair to the correct queue
-        queue_to_append.append((start_event, end_event))
-        # Flush the other queue to get the elapsed time
-        while queue_to_flush:
-            event_pair = queue_to_flush.popleft()
-            if event_pair[1].query():  # only flush if the end event is ready
-                flush_destination.append(event_pair[1].elapsed_time(event_pair[0]))
-            else:
-                queue_to_flush.appendleft(event_pair)
-                break
+        start_event.record(stream=self._compute_stream)
+        self._gpu_queue.append((start_event, end_event))
 
-    def flush_timing_queues(self) -> None:
-        for queue, dst in [(self.cpu_queue, self.cpu_prepare_times), (self.gpu_queue, self.gpu_compute_times)]:
-            while queue:
-                event_pair = queue.popleft()
-                event_pair[1].wait()
-                dst.append(event_pair[1].elapsed_time(event_pair[0]))
+    def end_gpu_span(self) -> None:
+        self._gpu_queue[-1][1].record(stream=self._compute_stream)
+
+    def flush_gpu_queue(self, blocking: bool) -> None:
+        while self._gpu_queue:
+            start_event, end_event = self._gpu_queue.popleft()
+            # If blocking, wait for the end event to be ready
+            if blocking:
+                end_event.wait()
+                self.gpu_compute_times.append(start_event.elapsed_time(end_event))
+            # Otherwise, only flush if the end event is ready
+            elif end_event.query():
+                self.gpu_compute_times.append(start_event.elapsed_time(end_event))
+            # If it is not, add the event pair back to the queue
+            else:
+                self._gpu_queue.appendleft((start_event, end_event))
+                break
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""

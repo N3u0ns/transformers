@@ -181,7 +181,7 @@ class ContinuousBatchProcessor:
                 break
             except Exception as e:
                 logger.error(f"Error processing new request: {e}", exc_info=True)
-                state: RequestState = locals().get("state")  # type:ignore
+                state: RequestState = locals().get("state")
                 if state is not None:
                     self._handle_request_error(e, state)
 
@@ -465,7 +465,7 @@ class ContinuousBatchProcessor:
         logits_2d = logits.view(batch_size * seq_len, vocab_size)
         input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
         # Process with 2D tensors#
-        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)  # type: ignore[arg-type]
+        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
         # Reshape back to 3D
         return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
@@ -648,9 +648,9 @@ class ContinuousBatchingManager:
                 logger.info(
                     f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
                 )
-            if self.batch_processor.inputs_and_outputs.time_forward_pass:
-                time_tracker = self.batch_processor.inputs_and_outputs.time_tracker
-                time_tracker.flush_timing_queues()
+            time_tracker = self.batch_processor.inputs_and_outputs.time_tracker
+            if time_tracker is not None:
+                time_tracker.flush_gpu_queue(blocking=True)
                 # Dump the timing information to a file
                 with open("cb_times.json", "w") as f:
                     json.dump({
@@ -851,6 +851,10 @@ class ContinuousBatchingManager:
             self.current_batch = 0
             logger.debug(f"batch_processor created in {perf_counter() - t1} seconds")
 
+            # If timing is enabled, we start the timer
+            if batch_processor.inputs_and_outputs.time_tracker is not None:
+                batch_processor.inputs_and_outputs.time_tracker.start_cpu_span()
+
             # If using the async API, we bootstrap the first batch w/out update
             if self.batch_processor.use_async_batching:
                 if not batch_processor.prepare_next_batch():
@@ -987,7 +991,7 @@ class ContinuousMixin:
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self,  # type: ignore
+            model=self,
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
