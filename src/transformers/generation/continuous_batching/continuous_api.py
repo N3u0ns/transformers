@@ -59,7 +59,7 @@ The maximum number of cached graphs is controlled by MAX_CACHED_GRAPHS (default 
 """
 Q_PADDING_INTERVAL_SIZE = 64
 KV_PADDING_INTERVAL_SIZE = 512 * 32  # 512 blocks of 32 tokens (interval size is in tokens for both Q and KV)
-MAX_CACHED_GRAPHS = 32
+MAX_CACHED_GRAPHS = 16
 
 
 # We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
