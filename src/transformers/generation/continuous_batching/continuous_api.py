@@ -566,6 +566,11 @@ class ContinuousBatchingManager:
         # transfers, and if CUDA graphs are not turned off, because that would mean we are trying to save memory
         else:
             self.use_async_batching = self.use_cuda_graph and not attn_mask_is_needed(self.model.config)
+            logger.info(
+                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because CUDA "
+                "graphs are turned on and no attention mask is needed. If you want to save memory, you can disable "
+                "asynchronous batching but it will degrade performance."
+            )
 
         # Padding interval sizes for Q and KV (0 means use defaults)
         self.q_padding_interval_size = (
