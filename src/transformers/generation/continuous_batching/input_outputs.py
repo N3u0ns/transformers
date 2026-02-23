@@ -650,7 +650,6 @@ class ContinuousBatchingAsyncIOs:
         if self.time_tracker is not None:
             self.time_tracker.start_cpu_span()
 
-
     # This method is called after the switch and not during the first batch
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
         io_pair = self.io_pairs[self.current_pair]

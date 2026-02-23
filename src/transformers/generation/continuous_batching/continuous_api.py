@@ -657,11 +657,14 @@ class ContinuousBatchingManager:
             if time_tracker is not None and self.timing_output_file is not None:
                 time_tracker.flush_gpu_queue(blocking=True)
                 with open(self.timing_output_file, "w") as f:
-                    json.dump({
-                        "cpu_prepare_times": time_tracker.cpu_prepare_times,
-                        "gpu_compute_times": time_tracker.gpu_compute_times,
-                        "total_time": perf_counter() - self._start_time,
-                    }, f)
+                    json.dump(
+                        {
+                            "cpu_prepare_times": time_tracker.cpu_prepare_times,
+                            "gpu_compute_times": time_tracker.gpu_compute_times,
+                            "total_time": perf_counter() - self._start_time,
+                        },
+                        f,
+                    )
 
         if self._generation_thread is None:
             logger.warning("Manager not started.")
