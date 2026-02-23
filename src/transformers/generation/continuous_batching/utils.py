@@ -46,11 +46,17 @@ class CudaGraphBuffer:
 
 
 class CpuGpuTimeTracker:
-    """Tracks CPU and GPU time spans for performance analysis. GPU times use async CUDA events for no added overhead."""
+    """Tracks CPU and GPU time spans for performance analysis. GPU times use async CUDA events for no added overhead.
+    There are three monitored spans:
+     - CPU prepare time: corresponds to the time spent preparing and updating batches on CPU
+     - GPU compute time: corresponds to the time spent computing the forward pass on GPU
+     - idle transfer time: only in async batching, corresponds to the time spent waiting for H2D transfer to complete
+    """
 
     def __init__(self, compute_stream: torch.cuda.Stream) -> None:
         # Public timing-related accumulators
         self.cpu_prepare_times: list[float] = []
+        self.idle_transfer_times: list[float] = []
         self.gpu_compute_times: list[float] = []
         # Private GPU-related attributes
         self._compute_stream = compute_stream
@@ -72,6 +78,14 @@ class CpuGpuTimeTracker:
     def end_cpu_span(self) -> None:
         end_time = perf_counter()
         self.cpu_prepare_times[-1] = end_time - self.cpu_prepare_times[-1]
+
+    def start_idle_span(self) -> None:
+        start_time = perf_counter()
+        self.idle_transfer_times.append(start_time)
+
+    def end_idle_span(self) -> None:
+        end_time = perf_counter()
+        self.idle_transfer_times[-1] = end_time - self.idle_transfer_times[-1]
 
     def start_gpu_span(self) -> None:
         self.flush_gpu_queue(blocking=False)

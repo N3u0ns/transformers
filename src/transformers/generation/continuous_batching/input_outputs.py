@@ -601,9 +601,11 @@ class ContinuousBatchingAsyncIOs:
         self.h2d_stream.record_event(io_pair.h2d_over)
         if self.time_tracker is not None:
             self.time_tracker.end_cpu_span()
+            self.time_tracker.start_idle_span()
         self.compute_stream.wait_event(io_pair.h2d_over)
         kwargs = io_pair.device_io.get_model_kwargs(padded_q_size, padded_kv_cache_size)
         if self.time_tracker is not None:
+            self.time_tracker.end_idle_span()
             self.time_tracker.start_gpu_span()
         return kwargs
 
@@ -640,6 +642,7 @@ class ContinuousBatchingAsyncIOs:
         # Wait for compute to finish before starting D2H transfer
         if self.time_tracker is not None:
             self.time_tracker.end_gpu_span()
+            self.time_tracker.start_cpu_span()
         self.compute_stream.record_event(io_pair.compute_over)
         self.d2h_stream.wait_event(io_pair.compute_over)
         # Transfer the outputs to the host
@@ -647,8 +650,6 @@ class ContinuousBatchingAsyncIOs:
         self.d2h_stream.record_event(io_pair.d2h_over)
         # Switch IO pair
         self.current_pair = 1 - self.current_pair
-        if self.time_tracker is not None:
-            self.time_tracker.start_cpu_span()
 
     # This method is called after the switch and not during the first batch
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
