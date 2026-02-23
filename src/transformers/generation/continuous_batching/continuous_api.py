@@ -661,6 +661,7 @@ class ContinuousBatchingManager:
                         {
                             "cpu_prepare_times": time_tracker.cpu_prepare_times,
                             "gpu_compute_times": time_tracker.gpu_compute_times,
+                            "idle_transfer_times": time_tracker.idle_transfer_times,
                             "total_time": perf_counter() - self._start_time,
                         },
                         f,
