@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import queue
 import threading
 from abc import abstractmethod
@@ -534,6 +535,7 @@ class ContinuousBatchingManager:
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
+        self._start_time = perf_counter()
 
         # Generation config related arguments
         generation_config = model.generation_config if generation_config is None else generation_config
@@ -646,6 +648,16 @@ class ContinuousBatchingManager:
                 logger.info(
                     f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
                 )
+            if self.batch_processor.inputs_and_outputs.time_forward_pass:
+                time_tracker = self.batch_processor.inputs_and_outputs.time_tracker
+                time_tracker.flush_timing_queues()
+                # Dump the timing information to a file
+                with open("cb_times.json", "w") as f:
+                    json.dump({
+                        "cpu_prepare_times": time_tracker.cpu_prepare_times,
+                        "gpu_compute_times": time_tracker.gpu_compute_times,
+                        "total_time": perf_counter() - self._start_time,
+                    }, f)
 
         if self._generation_thread is None:
             logger.warning("Manager not started.")

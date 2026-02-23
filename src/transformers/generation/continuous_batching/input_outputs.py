@@ -23,7 +23,7 @@ from transformers.configuration_utils import PretrainedConfig
 from ...utils.metrics import traced
 from .cache import PagedAttentionCache
 from .requests import TMP_TOKEN_ID, FutureRequestState
-from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask
+from .utils import CpuGpuTimeTracker, CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask
 
 
 @dataclass
@@ -90,6 +90,7 @@ class ContinuousBatchingIOs:
         device: torch.device,
         model_dtype: torch.dtype,
         max_graphs: int = 32,
+        time_forward_pass: bool = True,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
@@ -118,6 +119,9 @@ class ContinuousBatchingIOs:
         self._setup_static_tensors()
         self._reset_static_tensors(full_reset=True)
         self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
+        # If needed, setup timing-related attributes
+        self.time_forward_pass = time_forward_pass
+        self.time_tracker = CpuGpuTimeTracker(num_events=(8 if time_forward_pass else 0))
 
     @traced(standalone=True)
     def _setup_static_tensors(self) -> None:
@@ -261,6 +265,8 @@ class ContinuousBatchingIOs:
     def retrieve_device_outputs(self) -> None:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
+        if self.time_forward_pass:
+            self.time_tracker.start_cpu_span()
 
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
         requests_in_batch = self.requests_in_batch
@@ -440,6 +446,10 @@ class ContinuousBatchingIOs:
 
         if self.attention_mask is None:
             kwargs.attention_mask = None
+
+        if self.time_forward_pass:
+            self.time_tracker.start_gpu_span()
+
         return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
 
@@ -520,6 +530,7 @@ class ContinuousBatchingAsyncIOs:
         device: torch.device,
         model_dtype: torch.dtype,
         max_graphs: int = 32,
+        time_forward_pass: bool = False,
     ) -> None:
         # IO pairs used to avoid race conditions
         self.current_pair = 0
@@ -535,6 +546,9 @@ class ContinuousBatchingAsyncIOs:
         self.io_pairs[1].device_io.compute_stream = None
         # Used in carry over ids computation
         self.max_batch_tokens = cache.max_batch_tokens
+        # Timing-related attributes
+        self.time_forward_pass = time_forward_pass
+        self.time_tracker = CpuGpuTimeTracker(num_events=(16 if time_forward_pass else 0))
 
     # These methods are simple wrapper dispatching to the current IO pair
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
@@ -574,7 +588,10 @@ class ContinuousBatchingAsyncIOs:
         io_pair.transfer_inputs_h2d(self.h2d_stream)
         self.h2d_stream.record_event(io_pair.h2d_over)
         self.compute_stream.wait_event(io_pair.h2d_over)
-        return io_pair.device_io.get_model_kwargs(padded_q_size, padded_kv_cache_size)
+        kwargs = io_pair.device_io.get_model_kwargs(padded_q_size, padded_kv_cache_size)
+        if self.time_forward_pass:
+            self.time_tracker.start_gpu_span()
+        return kwargs
 
     def carry_over_tokens(self, input_ids: torch.Tensor) -> None:
         """As explained in the infer_carry_over_ids method, we might need to carry over tokens just predicted in batch N
@@ -614,6 +631,9 @@ class ContinuousBatchingAsyncIOs:
         self.d2h_stream.record_event(io_pair.d2h_over)
         # Switch IO pair
         self.current_pair = 1 - self.current_pair
+        if self.time_forward_pass:
+            self.time_tracker.start_cpu_span()
+
 
     # This method is called after the switch and not during the first batch
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
