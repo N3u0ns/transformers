@@ -91,6 +91,13 @@ See [docs/source/en/modular_transformers.md](docs/source/en/modular_transformers
 - `make check-repo` runs CI-style consistency checks.
 - `make fix-repo` auto-fixes copies, modular conversions, doc TOCs, doctest lists, and docstrings.
 
+**Typing Strategy (ty type checker)**
+- `make style` and `make check-repo` run `ty check` on directories listed in `ty_check_dirs` in the Makefile.
+- For mixin classes that depend on host-class attributes, declare expected attributes as class-level type annotations on the mixin (see `ContinuousMixin.generation_config` or `GenerationMixin.config`).
+- For reusable type definitions, create a `_typing.py` file in the relevant package using `Protocol` from `typing` (see `src/transformers/utils/_typing.py` for the pattern).
+- For classes with dynamically-set attributes, add class-level annotations to make them visible to the type checker.
+- ty configuration lives in `pyproject.toml` under `[tool.ty]`.
+
 **Git Workflow**
 - Keep PRs small; avoid unrelated refactors and sweeping reformatting.
 - When uncertain, prefer targeted changes and ask before widening scope.
