@@ -342,9 +342,7 @@ def test_batched():
         ],
     ]
 
-    model = GlmAsrForConditionalGeneration.from_pretrained(
-        checkpoint_name, device_map=torch_device, dtype="auto"
-    )
+    model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map=torch_device, dtype="auto")
 
     inputs = processor.apply_chat_template(
         conversation, tokenize=True, add_generation_prompt=True, return_dict=True
