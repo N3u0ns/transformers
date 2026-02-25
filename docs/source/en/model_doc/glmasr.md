@@ -127,23 +127,9 @@ print(decoded_outputs)
 
 You can process multiple audio files at once:
 
-```py
-from transformers import GlmAsrForConditionalGeneration, AutoProcessor
-
-processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
-
-inputs = processor.apply_transcription_request([
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
-])
-
-inputs = inputs.to(model.device, dtype=model.dtype)
-outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
-
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-print(decoded_outputs)
-```
+<literalinclude>
+{"path": "../../../../tests/models/glmasr/test_modeling_glmasr.py", "language": "python", "start-after": "START doc_batched_example", "end-before": "END doc_batched_example", "dedent": 4}
+</literalinclude>
 
 ## GlmAsrEncoderConfig
 
