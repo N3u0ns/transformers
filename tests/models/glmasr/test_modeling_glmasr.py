@@ -302,16 +302,6 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
 
 
 @pytest.fixture
-def glmasr_checkpoint_name():
-    return "zai-org/GLM-ASR-Nano-2512"
-
-
-@pytest.fixture
-def glmasr_processor(glmasr_checkpoint_name):
-    return AutoProcessor.from_pretrained(glmasr_checkpoint_name)
-
-
-@pytest.fixture
 def glmasr_cleanup():
     yield
     cleanup(torch_device, gc_collect=True)
@@ -320,8 +310,11 @@ def glmasr_cleanup():
 @require_torch
 @slow
 @pytest.mark.usefixtures("glmasr_cleanup")
-def test_batched(glmasr_checkpoint_name, glmasr_processor):
+def test_batched():
     # START doc_batched_example
+    checkpoint_name = "zai-org/GLM-ASR-Nano-2512"
+    processor = AutoProcessor.from_pretrained(checkpoint_name)
+
     conversation = [
         [
             {
@@ -350,14 +343,14 @@ def test_batched(glmasr_checkpoint_name, glmasr_processor):
     ]
 
     model = GlmAsrForConditionalGeneration.from_pretrained(
-        glmasr_checkpoint_name, device_map=torch_device, dtype="auto"
+        checkpoint_name, device_map=torch_device, dtype="auto"
     )
 
-    inputs = glmasr_processor.apply_chat_template(
+    inputs = processor.apply_chat_template(
         conversation, tokenize=True, add_generation_prompt=True, return_dict=True
     ).to(model.device, dtype=model.dtype)
 
-    inputs_transcription = glmasr_processor.apply_transcription_request(
+    inputs_transcription = processor.apply_transcription_request(
         [
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
@@ -369,7 +362,7 @@ def test_batched(glmasr_checkpoint_name, glmasr_processor):
 
     outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
-    decoded_outputs = glmasr_processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+    decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
 
     EXPECTED_OUTPUT = [
         "Yesterday it was thirty five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
