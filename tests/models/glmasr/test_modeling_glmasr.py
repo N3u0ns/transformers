@@ -15,9 +15,11 @@
 
 import tempfile
 import unittest
+from pathlib import Path
 
 import pytest
 
+from tests.utils.doc_integration import DocIntegrationTest
 from transformers import (
     AutoProcessor,
     GlmAsrConfig,
@@ -301,70 +303,9 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
 
-@pytest.fixture
-def glmasr_cleanup():
-    yield
-    cleanup(torch_device, gc_collect=True)
-
-
 @require_torch
 @slow
-@pytest.mark.usefixtures("glmasr_cleanup")
-def test_batched():
-    # START doc_batched_example
-    checkpoint_name = "zai-org/GLM-ASR-Nano-2512"
-    processor = AutoProcessor.from_pretrained(checkpoint_name)
-
-    conversation = [
-        [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
-                    },
-                    {"type": "text", "text": "Please transcribe this audio into text"},
-                ],
-            },
-        ],
-        [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
-                    },
-                    {"type": "text", "text": "Please transcribe this audio into text"},
-                ],
-            },
-        ],
-    ]
-
-    model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map=torch_device, dtype="auto")
-
-    inputs = processor.apply_chat_template(
-        conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-    ).to(model.device, dtype=model.dtype)
-
-    inputs_transcription = processor.apply_transcription_request(
-        [
-            "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
-            "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
-        ],
-    ).to(model.device, dtype=model.dtype)
-
-    for key in inputs:
-        assert torch.equal(inputs[key], inputs_transcription[key])
-
-    outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
-
-    decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-
-    EXPECTED_OUTPUT = [
-        "Yesterday it was thirty five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
-        "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the",
-    ]
-    assert decoded_outputs == EXPECTED_OUTPUT
-    # END doc_batched_example
+class GlmAsrDocIntegrationTest(DocIntegrationTest):
+    # tests/models/glmasr -> tests/models -> tests -> repo root
+    doc_path = Path(__file__).resolve().parents[3] / "docs" / "source" / "en" / "model_doc" / "glmasr.md"
+    cleanup_func = staticmethod(lambda: cleanup(torch_device, gc_collect=True))
