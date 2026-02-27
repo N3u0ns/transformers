@@ -49,7 +49,7 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 <options id="usage">
 <hfoption id="AutoModel">
 
-```py
+```py runnable
 from transformers import AutoModelForSeq2SeqLM, AutoProcessor
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
@@ -71,10 +71,11 @@ print(decoded_outputs)
 
 The processor's `apply_transcription_request` is equivalent to using the chat template in the following manner:
 
-```py
+```py runnable
 from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 
-processor = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
 
 inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
@@ -98,13 +99,19 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     return_dict=True,
 )
+
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 One can also use audio arrays directly:
 
-```py
+```py runnable
 from transformers import GlmAsrForConditionalGeneration, AutoProcessor
-from datasets import load_dataset
+from datasets import load_dataset, Audio
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
 model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
