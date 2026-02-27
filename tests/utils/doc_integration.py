@@ -1,8 +1,8 @@
 import re
 import unittest
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
 
 
 @dataclass
@@ -74,7 +74,7 @@ class DocIntegrationTest(unittest.TestCase):
         return blocks
 
     @classmethod
-    def _iter_runnable_code_blocks(cls, text: str) -> Iterable[tuple[str, Optional[str]]]:
+    def _iter_runnable_code_blocks(cls, text: str) -> Iterable[tuple[str, str | None]]:
         """
         Yield (code, name) pairs for blocks marked with the runnable flag from the given markdown text.
         Supports optional naming via a suffix: ```py runnable:test_name
