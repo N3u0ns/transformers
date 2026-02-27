@@ -46,8 +46,6 @@ class DocIntegrationTest(unittest.TestCase):
                 try:
                     exec(compile(code, str(resolved_path), "exec"), namespace)
                 except Exception as err:
-                    raise AssertionError(
-                        f"Doc block {idx} in {resolved_path} failed to execute:\n{code}"
-                    ) from err
+                    raise AssertionError(f"Doc block {idx} in {resolved_path} failed to execute:\n{code}") from err
                 finally:
                     self._run_cleanup()
