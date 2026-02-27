@@ -49,7 +49,7 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 <options id="usage">
 <hfoption id="AutoModel">
 
-```py runnable
+```py runnable:test_basic
 from transformers import AutoModelForSeq2SeqLM, AutoProcessor
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
@@ -71,7 +71,7 @@ print(decoded_outputs)
 
 The processor's `apply_transcription_request` is equivalent to using the chat template in the following manner:
 
-```py runnable
+```py runnable:test_advanced
 from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
@@ -109,7 +109,7 @@ print(decoded_outputs)
 
 One can also use audio arrays directly:
 
-```py runnable
+```py runnable:test_audio_array
 from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
@@ -134,7 +134,7 @@ print(decoded_outputs)
 
 You can process multiple audio files at once:
 
-```py runnable
+```py runnable:test_batched
 import torch
 from transformers import AutoProcessor, GlmAsrForConditionalGeneration
 
