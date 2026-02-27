@@ -15,6 +15,8 @@ class RunnableBlock:
 class DocIntegrationTest(unittest.TestCase):
     """Base class to execute runnable code blocks embedded in markdown docs."""
 
+    __test__ = False  # Prevent pytest from collecting the base class itself.
+
     # Path to the markdown file; subclasses should override.
     doc_path: Path | None = None
     # Optional cleanup hook called after each block (e.g., freeing GPU memory).
@@ -29,9 +31,12 @@ class DocIntegrationTest(unittest.TestCase):
         super().__init_subclass__(**kwargs)
         blocks = cls._collect_runnable_blocks()
         if not blocks:
+            # Allow pytest to collect subclasses that provide their own doc_path without blocks.
+            cls.__test__ = True
             return
 
         cls._dynamic_tests_created = True
+        cls.__test__ = True  # Enable collection for subclasses with runnable blocks.
 
         for block in blocks:
             method_name = block.name if block.name.startswith("test") else f"test_{block.name}"
@@ -47,6 +52,10 @@ class DocIntegrationTest(unittest.TestCase):
                 return _test
 
             setattr(cls, method_name, _make_test(block.code, block.name))
+
+        # Avoid double-reporting: neutralize the catch-all method when per-block tests exist.
+        if hasattr(cls, "test_markdown_runnable_blocks"):
+            setattr(cls, "test_markdown_runnable_blocks", None)
 
     @classmethod
     def _collect_runnable_blocks(cls) -> list[RunnableBlock]:
