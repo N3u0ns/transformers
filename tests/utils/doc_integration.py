@@ -45,5 +45,9 @@ class DocIntegrationTest(unittest.TestCase):
                 namespace = {"__name__": f"{resolved_path.stem}_doc_example_{idx}"}
                 try:
                     exec(compile(code, str(resolved_path), "exec"), namespace)
+                except Exception as err:
+                    raise AssertionError(
+                        f"Doc block {idx} in {resolved_path} failed to execute:\n{code}"
+                    ) from err
                 finally:
                     self._run_cleanup()
